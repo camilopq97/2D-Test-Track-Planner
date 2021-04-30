@@ -243,6 +243,8 @@ RUN \
     && apt autoremove && apt clean -y \
     && rm -rf /var/lib/apt/lists/*
 
+RUN echo "source /opt/ros/foxy/setup.bash" >> /home/$USERNAME/.bashrc
+
 # Logging variables
 # https://index.ros.org/doc/ros2/Tutorials/Logging-and-logger-configuration/
 # # If you would like more or less verbose formatting
