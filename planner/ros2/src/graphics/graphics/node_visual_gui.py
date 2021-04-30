@@ -27,9 +27,12 @@ from rclpy.node import Node
 
 from utils.python_utils import printlog
 from utils.python_utils import print_list_text
+from utils.python_utils import overlay_image
 
 from usr_msgs.msg import Planner as planner_msg
 from usr_msgs.msg import Kiwibot as kiwibot_msg
+
+from std_msgs.msg import Int32
 
 # =============================================================================
 def setProcessName(name: str) -> None:
@@ -122,12 +125,12 @@ class VisualsNode(Thread, Node):
         # Uncomment
         # Publisher for activating the rear cam streaming
         # self.msg_path_number = Int32()
-        # self.pub_start_routine = self.create_publisher(
-        #     msg_type=Int32,
-        #     topic="/graphics/start_routine",
-        #     qos_profile=1,
-        #     callback_group=self.callback_group,
-        # )
+        self.pub_start_routine = self.create_publisher(
+            msg_type=Int32,
+            topic="/graphics/start_routine",
+            qos_profile=1,
+            callback_group=self.callback_group,
+        )
 
         # ---------------------------------------------------------------------
         self.damon = True
@@ -342,6 +345,8 @@ class VisualsNode(Thread, Node):
         # -----------------------------------------
         # Insert you solution here
 
+        l_img = overlay_image(l_img, s_img, pos, transparency, src_center=True)
+
         return l_img  # remove this line when implement your solution
 
         # -----------------------------------------
@@ -361,10 +366,10 @@ class VisualsNode(Thread, Node):
         win_img, robot_coord = self.crop_map(coord=coord)
 
         # Draws robot in maps image
-        # if coord[0] and coord[1]:
-        # win_img = self.draw_robot(
-        #     l_img=win_img, s_img=self._kiwibot_img, pos=robot_coord
-        # )
+        if coord[0] and coord[1]:
+            win_img = self.draw_robot(
+                l_img=win_img, s_img=self._kiwibot_img, pos=robot_coord
+            )
 
         # Draw descriptions
         str_list = [
@@ -425,8 +430,14 @@ class VisualsNode(Thread, Node):
 
         # -----------------------------------------
         # Insert you solution here
-        pass
-
+        for landmark in land_marks:
+            cv2.circle(
+                img=self._win_background,
+                center=tuple((landmark.x, landmark.y)),
+                radius=18,
+                color=(0, 0, 255),
+                thickness=2,
+            )
         # -----------------------------------------
 
     def run(self) -> None:
@@ -471,7 +482,7 @@ class VisualsNode(Thread, Node):
                         msg=f"Code is broken here",
                         msg_type="WARN",
                     )
-                    continue  # remove this line
+                    # continue  # remove this line
                     printlog(
                         msg=f"Routine {chr(key)} was sent to path planner node",
                         msg_type="INFO",
