@@ -89,11 +89,11 @@ class PlannerNode(Node):
         # ---------------------------------------------------------------------
         # Environment variables for forware and turn profiles
         self._TURN_ACELERATION_FC = float(os.getenv("TURN_ACELERATION_FC", default=0.3))
-        self._TURN_CRTL_POINTS = float(os.getenv("TURN_CRTL_POINTS", default=30))
+        self._TURN_CRTL_POINTS = int(os.getenv("TURN_CRTL_POINTS", default=30))
         self._FORWARE_ACELERATION_FC = float(
             os.getenv("FORWARE_ACELERATION_FC", default=0.3)
         )
-        self._FORWARE_CRTL_POINTS = float(os.getenv("FORWARE_CRTL_POINTS", default=30))
+        self._FORWARE_CRTL_POINTS = int(os.getenv("FORWARE_CRTL_POINTS", default=30))
         self._TURN_TIME = float(os.getenv("TURN_TIME", default=3.0))
 
         # ---------------------------------------------------------------------
@@ -479,6 +479,54 @@ class PlannerNode(Node):
         # "dt": [float](sept of time for angle a, is constant element)
         # Do not forget and respect the keys names
 
+        dt = time / n
+        t_disc = []
+        prev = 0.0
+        for i in range(0,n):
+            t_disc.append(prev+dt)
+            prev += dt
+
+        d_x = dst[0] - src[0]
+        d_y = dst[1] - src[1]
+        v_max_x = d_x / ( time * ( 1.0 - pt ) )
+        v_max_y = d_y / ( time * ( 1.0 - pt ) )
+
+        vel_x = [0.0]*len(t_disc)
+        vel_y = [0.0]*len(t_disc)
+        pos_x = [src[0]]*len(t_disc)
+        pos_y = [src[1]]*len(t_disc)
+
+        for index, t_val in enumerate(t_disc):
+            if index > 0:
+                if t_val <= time * pt:
+                    vel_x[index] = (v_max_x * t_val) / (pt * time)
+                    vel_y[index] = (v_max_y * t_val) / (pt * time)
+                    pos_x[index] = pos_x[index-1] + 1/2 * dt * (vel_x[index] + vel_x[index - 1])
+                    pos_y[index] = pos_y[index-1] + 1/2 * dt * (vel_y[index] + vel_y[index - 1])
+                elif t_val > time * pt and t_val <= (time * (1 - pt)):
+                    vel_x[index] = v_max_x
+                    vel_y[index] = v_max_y
+                    pos_x[index] = pos_x[index - 1] + dt * v_max_x
+                    pos_y[index] = pos_y[index - 1] + dt * v_max_y
+                elif t_val > (time * (1 - pt)):
+                    vel_x[index] = v_max_x - ((v_max_x*(t_val - (time * (1 - pt))))/(pt * time))
+                    vel_y[index] = v_max_y - ((v_max_y*(t_val - (time * (1 - pt))))/(pt * time))
+                    pos_x[index] = pos_x[index - 1] + 1/2 * dt * (vel_x[index] + vel_x[index - 1])
+                    pos_y[index] = pos_y[index - 1] + 1/2 * dt * (vel_y[index] + vel_y[index - 1])
+
+        pos_x = [round(val) for val in pos_x]
+        pos_y = [round(val) for val in pos_y]
+
+        for index, t_val in enumerate(t_disc):
+            way_points.append(
+                {
+                    "idx": index,
+                    "pt": (int(pos_x[index]), int(pos_y[index])),
+                    "t": t_val,
+                    "dt": dt,
+                }
+            )
+        
         # ---------------------------------------------------------------------
 
         return way_points
@@ -487,7 +535,7 @@ class PlannerNode(Node):
         """
             Generates waypoints: coordinates and times with a trapezoidal turning profile
         Args:
-            dst: `tuple` target angle
+            dst: `float` target angle
             time: `float` time for turning angle
             pt: `float` deceleration/acceleration factor
             n: `int` control points to discrite the trajectory
@@ -516,6 +564,41 @@ class PlannerNode(Node):
         # "dt": [float](sept of time for angle a, is constant element)
         # Do not forget and respect the keys names
 
+        dt = time / n
+        t_disc = []
+        prev = 0.0
+        for i in range(0,n):
+            t_disc.append(prev+dt)
+            prev += dt
+
+        w_max = dst / ( time * ( 1.0 - pt ) )
+
+        w_a = [0.0]*len(t_disc)
+        th_a = [0.0]*len(t_disc)
+
+        for index, t_val in enumerate(t_disc):
+            if index > 0:
+                if t_val <= time * pt:
+                    w_a[index] = (w_max * t_val) / (pt * time)
+                    th_a[index] = th_a[index-1] + 1/2 * dt * (w_a[index] + w_a[index - 1])
+                elif t_val > time * pt and t_val <= (time * (1 - pt)):
+                    w_a[index] = w_max
+                    th_a[index] = th_a[index - 1] + dt * w_max
+                elif t_val > (time * (1 - pt)):
+                    w_a[index] = w_max - ((w_max*(t_val - (time * (1 - pt))))/(pt * time))
+                    th_a[index] = th_a[index - 1] + 1/2 * dt * (w_a[index] + w_a[index - 1])
+
+        th_a = [round(val,1) for val in th_a]
+
+        for index, t_val in enumerate(t_disc):
+            turn_points.append(
+                {
+                    "idx": index,
+                    "a": th_a[index],
+                    "t": t_val,
+                    "dt": dt,
+                }
+            )
         # ---------------------------------------------------------------------
         return turn_points
 
