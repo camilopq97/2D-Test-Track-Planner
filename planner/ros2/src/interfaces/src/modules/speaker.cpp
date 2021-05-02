@@ -32,6 +32,10 @@ Speaker::Speaker(rclcpp::NodeOptions &options) : Node("speaker", "interfaces", o
     * https://docs.ros.org/en/foxy/Tutorials/Writing-A-Simple-Cpp-Publisher-And-Subscriber.html#write-the-subscriber-node
    ********************************************/
 
+    m_speaker_sub = this->create_subscription<std_msgs::msg::Int8>(
+        "/device/speaker/command", default_qos, std::bind(&Speaker::speakerCb, this, _1));
+        
+        // subscription_options,qos_profile,std::bind(&MinimalSubscriber::topic_callback, this, _1));
    /********************************************
     * END CODE 
    ********************************************/
@@ -100,11 +104,14 @@ void Speaker::speakerCb(const std_msgs::msg::Int8::SharedPtr msg)
         {
             readfd = open((m_path + std::to_string(msg->data) + ".wav").c_str(), O_RDONLY);
             status = pthread_create(&pthread_id, NULL, (THREADFUNCPTR)&Speaker::PlaySound, this);
-        }
+        } else {
         /********************************************
         * PLAY A DEFAULT SOUND IF NOT FOUND THE TRACK FILE
         ********************************************/
-        
+            RCLCPP_INFO(this->get_logger(), "DEFAULT SOUND");
+            readfd = open((m_path + "2.wav").c_str(), O_RDONLY);
+            status = pthread_create(&pthread_id, NULL, (THREADFUNCPTR)&Speaker::PlaySound, this);
+        }
         /********************************************
         * END CODE 
         ********************************************/
@@ -135,6 +142,9 @@ void *Speaker::PlaySound()
     ********************************************/
     std_msgs::msg::Bool::UniquePtr msg(new std_msgs::msg::Bool());
 
+    msg->data = false;
+    m_done_pub->publish(std::move(msg));
+
    /********************************************
     * END CODE 
    ********************************************/
@@ -161,6 +171,8 @@ void *Speaker::PlaySound()
     ********************************************/
     // This is just for clean the variable name and re-initialize it.
     msg.reset(new std_msgs::msg::Bool());
+    msg->data = true;
+    m_done_pub->publish(std::move(msg));
     
    /********************************************
     * END CODE 
