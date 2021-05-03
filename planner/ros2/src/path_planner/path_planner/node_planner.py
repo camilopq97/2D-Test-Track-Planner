@@ -24,6 +24,7 @@ from rclpy.qos import qos_profile_sensor_data
 
 from std_msgs.msg import Int32
 from std_msgs.msg import Int8
+from std_msgs.msg import Bool
 
 from utils.python_utils import printlog
 
@@ -149,6 +150,15 @@ class PlannerNode(Node):
             callback_group=self.callback_group,
         )
 
+        # Publisher to send the order of start or stop recording video
+
+        self.pub_recording = self.create_publisher(
+            msg_type=Bool,
+            topic="/path_planner/record",
+            qos_profile=qos_profile_sensor_data,
+            callback_group=self.callback_group,
+        )
+
         # ---------------------------------------------------------------------
         # Services
 
@@ -238,6 +248,9 @@ class PlannerNode(Node):
                         difficulty=self.map_difficulty,
                     )
                 )
+
+                # Start video
+                self.pub_recording.publish(Bool(data=True))
 
                 # -------------------------------------------------------
                 # Get the robot in the initial position
@@ -351,6 +364,9 @@ class PlannerNode(Node):
 
                 # -------------------------------------------------------
                 self.pub_speaker.publish(Int8(data=3))
+
+                # Stop video
+                self.pub_recording.publish(Bool(data=False))
 
             else:
                 printlog(

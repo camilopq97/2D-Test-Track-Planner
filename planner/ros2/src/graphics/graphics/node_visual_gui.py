@@ -15,6 +15,7 @@ import sys
 import os
 
 from threading import Thread, Event
+from datetime import datetime
 
 # from std_msgs.msg import Int32
 
@@ -33,6 +34,7 @@ from usr_msgs.msg import Planner as planner_msg
 from usr_msgs.msg import Kiwibot as kiwibot_msg
 
 from std_msgs.msg import Int32
+from std_msgs.msg import Bool
 
 # =============================================================================
 def setProcessName(name: str) -> None:
@@ -80,6 +82,15 @@ class VisualsNode(Thread, Node):
         self._kiwibot_img_path = "/workspace/planner/media/images/kiwibot.png"
         self._kiwibot_img = cv2.imread(self._kiwibot_img_path, cv2.IMREAD_UNCHANGED)
 
+        # Video Recorder object and variables
+        self.fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        self.writer = cv2.VideoWriter()
+        self.recording = False
+        self.video_path = "/workspace/planner/media/video/"
+        self.routine = 0
+        self.frames = []
+        self.video_name = ''
+
         # ---------------------------------------------------------------------
         # Subscribers
 
@@ -93,6 +104,14 @@ class VisualsNode(Thread, Node):
             msg_type=planner_msg,
             topic="/path_planner/msg",
             callback=self.cb_path_planner,
+            qos_profile=qos_profile_sensor_data,
+            callback_group=self.callback_group,
+        )
+
+        self.sub_video_recorder = self.create_subscription(
+            msg_type=Bool,
+            topic="/path_planner/record",
+            callback=self.cb_video_recorder,
             qos_profile=qos_profile_sensor_data,
             callback_group=self.callback_group,
         )
@@ -324,7 +343,8 @@ class VisualsNode(Thread, Node):
             src=self._kiwibot_img,
             M=M,
             dsize=(cols, rows),
-            flags=cv2.INTER_CUBIC,
+            flags=cv2.INTER_LANCZOS4,
+            # flags=cv2.INTER_CUBIC,
         )
 
     # TODO: Draw the robot
@@ -440,6 +460,105 @@ class VisualsNode(Thread, Node):
             )
         # -----------------------------------------
 
+    def cb_video_recorder(self, msg: Bool) -> None:
+        """
+        Callback to start or stop the video recording
+        Args:
+            msg: `Bool` instruction to start (True) or stop (False) video recording
+        Returns:
+        """
+        var = msg.data
+
+        if var == True:
+            self.start_video()
+        else:
+            self.stop_video()
+            
+    
+    def start_video(self):
+        """
+        Function that start the recording, if it is not already recording
+        Args:
+        Returns:
+        """
+        if self.recording == True:
+            printlog(
+                msg="Video already recording",
+                msg_type="WARN",
+            )
+        else:
+            self.video_name = self.get_video_name()
+            printlog(
+                msg="Init recording {} \n{}".format(self.recording, self.video_name),
+                msg_type="OKGREEN",
+            )
+            self.recording = True
+
+    def stop_video(self):
+        """
+        Function that stop the recording, if it is recording
+        Args:
+        Returns:
+        """
+        if self.recording == True:
+            self.recording = False
+            self.save_video(self.video_name)
+        else:
+            printlog(
+                msg="Video already stopped",
+                msg_type="WARN",
+            )
+    
+    def save_video(self, name) -> None:
+        """
+        Function that handles VideoWriter object, and saves the recorded frames
+        Args: name: `string` Video full path
+        Returns:
+        """
+        if not os.path.exists(name):
+            self.writer = cv2.VideoWriter(
+                name, 
+                self.fourcc , 
+                15.0, 
+                self._win_size,
+            )
+            try:
+                    for frame in self.frames:
+                        self.writer.write(frame)
+
+                    self.writer.release()
+                    self.frames = []
+
+                    printlog(
+                        msg="VIDEO SAVED",
+                        msg_type="OKGREEN",
+                    )
+            except Exception as e:
+                printlog(
+                    msg="ERROR {}".format(e),
+                    msg_type="ERROR",
+                )
+        else:
+            printlog(
+            msg="Video {} already exists".format(name),
+            msg_type="WARN",
+        )
+
+    def get_video_name(self):
+        """
+        Function to get the video full path
+        Args:
+        Returns:
+            video_name: `string` Video full path
+        """
+
+        now = datetime.now()
+        # date_time = now.strftime("_%d-%m-%Y_%H-%M-%S")
+        date_time = now.strftime("_%d-%m-%Y")
+        video_name = self.video_path + 'routine_' + str(self.routine) + date_time + '.mp4'
+
+        return video_name
+
     def run(self) -> None:
         """
             Callback to update & draw window components
@@ -471,6 +590,11 @@ class VisualsNode(Thread, Node):
 
                 # Update the images dictionary in the callback action
                 cv2.imshow(self._win_name, win_img)
+
+                # Get the image displayed into frames list
+                if self.recording:
+                    self.frames.append(win_img)
+
                 key = cv2.waitKey(self._win_time)
 
                 # No key
@@ -478,16 +602,20 @@ class VisualsNode(Thread, Node):
                     continue
                 # Key1=1048633 & Key9=1048625
                 elif key >= 48 and key <= 57:
-                    printlog(
-                        msg=f"Code is broken here",
-                        msg_type="WARN",
-                    )
+                    # printlog(
+                    #     msg=f"Code is broken here",
+                    #     msg_type="WARN",
+                    # )
                     # continue  # remove this line
                     printlog(
                         msg=f"Routine {chr(key)} was sent to path planner node",
                         msg_type="INFO",
                     )
                     self.pub_start_routine.publish(Int32(data=int(chr(key))))
+
+                    # Saves the routine ID that is currently being executed
+                    self.routine = int(chr(key))
+
                 else:
                     printlog(
                         msg=f"No action for key {chr(key)} -> {key}",
