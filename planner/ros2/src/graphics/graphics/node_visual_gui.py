@@ -151,6 +151,13 @@ class VisualsNode(Thread, Node):
             callback_group=self.callback_group,
         )
 
+        self.pub_pause = self.create_publisher(
+            msg_type=Int32,
+            topic="/graphics/pause",
+            qos_profile=qos_profile_sensor_data,
+            callback_group=self.callback_group,
+        )
+
         # ---------------------------------------------------------------------
         self.damon = True
         self.run_event = Event()
@@ -615,6 +622,14 @@ class VisualsNode(Thread, Node):
 
                     # Saves the routine ID that is currently being executed
                     self.routine = int(chr(key))
+
+                elif key == 112:
+                    # Send pause message if 'p' is pressed
+                    self.pub_pause.publish(Int32(data=1))
+                    printlog(
+                        msg=f"Pause {chr(key)} was sent to kiwibot node",
+                        msg_type="INFO",
+                    )
 
                 else:
                     printlog(

@@ -133,6 +133,16 @@ class PlannerNode(Node):
             callback_group=self.callback_group,
         )
 
+        self.sub_planner_pause = self.create_subscription(
+            msg_type=Int32,
+            topic="/graphics/pause",
+            callback=self.cb_planner_pause,
+            qos_profile=qos_profile_sensor_data,
+            callback_group=self.callback_group,
+        )
+
+        self.is_paused = False
+
         # ---------------------------------------------------------------------
         # Publishers
 
@@ -274,81 +284,88 @@ class PlannerNode(Node):
                 self.pub_speaker.publish(Int8(data=2))
                 for idx, way_point in enumerate(self.way_points["coords"][:-1]):
 
-                    # -------------------------------------------------------
-                    # Calculate the angle to turn the robot
-                    dy = (
-                        self.way_points["coords"][idx][1]
-                        - self.way_points["coords"][idx + 1][1]
-                    )
-                    dx = (
-                        self.way_points["coords"][idx + 1][0]
-                        - self.way_points["coords"][idx][0]
-                    )
-                    ang = np.rad2deg(np.arctan2(dy, dx))
-                    dang = ang - self.kiwibot_state.yaw
+                    if self.is_paused:
+                        # If the 'p' button is pressed, the next landmark will stop
+                        self._in_execution = False
+                        self.is_paused = False
+                        break
+                    else:
 
-                    if abs(dang) > 180:
-                        dang += 360
-                    elif dang > 360:
-                        dang -= 360
-                    elif dang > 180:
-                        dang -= 360
-                    elif dang < -180:
-                        dang += 360
+                        # -------------------------------------------------------
+                        # Calculate the angle to turn the robot
+                        dy = (
+                            self.way_points["coords"][idx][1]
+                            - self.way_points["coords"][idx + 1][1]
+                        )
+                        dx = (
+                            self.way_points["coords"][idx + 1][0]
+                            - self.way_points["coords"][idx][0]
+                        )
+                        ang = np.rad2deg(np.arctan2(dy, dx))
+                        dang = ang - self.kiwibot_state.yaw
 
-                    if int(dang):
+                        if abs(dang) > 180:
+                            dang += 360
+                        elif dang > 360:
+                            dang -= 360
+                        elif dang > 180:
+                            dang -= 360
+                        elif dang < -180:
+                            dang += 360
 
+                        if int(dang):
+
+                            printlog(
+                                msg=f"turning robot to reference {idx+1}",
+                                msg_type="OKPURPLE",
+                            )
+
+                            # Generate the turning profile to get the robot aligned to the next landmark
+                            self.robot_turn_req.turn_ref = [
+                                TurnRef(
+                                    id=turn_reference["idx"],
+                                    yaw=turn_reference["a"],
+                                    t=turn_reference["t"],
+                                    dt=turn_reference["dt"],
+                                )
+                                for turn_reference in self.get_profile_turn(
+                                    dst=dang,
+                                    time=self._TURN_TIME,
+                                    pt=self._TURN_ACELERATION_FC,
+                                    n=self._TURN_CRTL_POINTS,
+                                )
+                            ]
+
+                            move_resp = self.cli_robot_turn.call(self.robot_turn_req)
+
+                        # -------------------------------------------------------
                         printlog(
-                            msg=f"turning robot to reference {idx+1}",
+                            msg=f"moving robot to landmark {idx}",
                             msg_type="OKPURPLE",
                         )
 
-                        # Generate the turning profile to get the robot aligned to the next landmark
-                        self.robot_turn_req.turn_ref = [
-                            TurnRef(
-                                id=turn_reference["idx"],
-                                yaw=turn_reference["a"],
-                                t=turn_reference["t"],
-                                dt=turn_reference["dt"],
+                        # Generate the waypoints to the next landmark
+                        seg_way_points = self.get_profile_route(
+                            src=self.way_points["coords"][idx],
+                            dst=self.way_points["coords"][idx + 1],
+                            time=self.way_points["times"][idx],
+                            pt=self._FORWARE_ACELERATION_FC,
+                            n=self._FORWARE_CRTL_POINTS,
+                        )
+
+                        # Move the robot to the next landmark
+                        self.robot_move_req.waypoints = [
+                            Waypoint(
+                                id=wp["idx"],
+                                x=int(wp["pt"][0]),
+                                y=int(wp["pt"][1]),
+                                t=wp["t"],
+                                dt=wp["dt"],
                             )
-                            for turn_reference in self.get_profile_turn(
-                                dst=dang,
-                                time=self._TURN_TIME,
-                                pt=self._TURN_ACELERATION_FC,
-                                n=self._TURN_CRTL_POINTS,
-                            )
+                            for wp in seg_way_points
                         ]
 
-                        move_resp = self.cli_robot_turn.call(self.robot_turn_req)
-
-                    # -------------------------------------------------------
-                    printlog(
-                        msg=f"moving robot to landmark {idx}",
-                        msg_type="OKPURPLE",
-                    )
-
-                    # Generate the waypoints to the next landmark
-                    seg_way_points = self.get_profile_route(
-                        src=self.way_points["coords"][idx],
-                        dst=self.way_points["coords"][idx + 1],
-                        time=self.way_points["times"][idx],
-                        pt=self._FORWARE_ACELERATION_FC,
-                        n=self._FORWARE_CRTL_POINTS,
-                    )
-
-                    # Move the robot to the next landmark
-                    self.robot_move_req.waypoints = [
-                        Waypoint(
-                            id=wp["idx"],
-                            x=int(wp["pt"][0]),
-                            y=int(wp["pt"][1]),
-                            t=wp["t"],
-                            dt=wp["dt"],
-                        )
-                        for wp in seg_way_points
-                    ]
-
-                    move_resp = self.cli_robot_move.call(self.robot_move_req)
+                        move_resp = self.cli_robot_move.call(self.robot_move_req)
 
                 # -------------------------------------------------------
                 if not self._in_execution:
@@ -631,6 +648,18 @@ class PlannerNode(Node):
             )
         # ---------------------------------------------------------------------
         return turn_points
+
+    def cb_planner_pause(self, msg: Int32) -> None:
+        """
+            Callback to stop a routine
+        Args:
+            msg: `Int32` stop command
+        Returns:
+        """
+        if self.is_paused:
+            self.is_paused = True
+        else:
+            self.is_paused = True
 
 
 # =============================================================================
