@@ -135,30 +135,62 @@ Respond below every questions:
 
 1. [Python] Why the robot's image gets distorted when is turning?
 
+The distortion in the robot's image when is turning is caused by the type of interpolation used in the `cv2.warpAffine` function, inside the `node_visual_gui.py` node - line 327. There are several [types of interpolation flags available on cv2](https://docs.opencv.org/4.4.0/da/d54/group__imgproc__transform.html#ga5bb5a1fea74ea38e1a5445ca803ff121). The ones that generate a more distorted images are INTER_NEAREST, INTER_LINEAR or INTER_AREA. The best results for robot turn were the INTER_CUBIC (the same that was used in the original code) and the INTER_LANCZOS4, so I decided to use that one to minimize distortion.
+
 2. [Python] what is `ReentrantCallbackGroup()` in the python nodes with you own words, give an common life example, and what happen if is not used?
+
+The `ReentrantCallbackGroup()` refers to the type of callback group, which in this case is defined for the subscribers inside the nodes. The Reentrant callback allows to run the callback functions at the same time with other callbacks in the same group, so the process won't get stucked. It could be similar to a multitasking person, who could make different tasks at the same time (read, listen to music, get a phone call, etc). If we don't use that Reentrant callback, the nodes only could excecute one callback at the same time (also called Mutually exclusive callbacks).
 
 3. [Python] are Python packages compiled as C++ packages?
 
+No. Since Python is an interpreted language, which basically means it is compiled during runtime by the Python interpreter. Instead, C++ packages are compiled before runtime, so the "machine code" is ready for excecution before run the nodes. In ROS it is made by the popular catkin_make instructions (ROS1) or colcon build (ROS2).
+
 4. [Python] Why with some code errors in some nodes the logs are not printed?
+
+The `printlog` function located in `python_utils.py` is used to print the logs and errors. It's probably that this function don't print the logs if the flush parameter is set to false when we call the function.
 
 5. [Control] What other turn or speed profile would you implement, why, and what are the benefits?
 
+I'd probably choose the s-curve speed profile. This profile decreases the abrupt acceleration changes (also known as jerk). The s-curve profile has smoother trajectory, which benefit the mechanical components in the motion system, decreasing the vibrations in the system because there's no abrubt (infinite) changes in the acceleration.
+
+<p align="center">
+  <img height="400" src="https://www.pmdcorp.com/hs-fs/hubfs/Diagrams/fig1-s-curve-trapezoidal-motion-profiles.png?width=900&name=fig1-s-curve-trapezoidal-motion-profiles.png">
+</p>
+
 6. [C++] What is the mean of the number "15" used in the pthread_kill inside the destructor method?
+
+It refers to the SIGTERM id signal, which is sended to the thread for program termination.
 
 7. [C++] Why are we using UniquePointer instead of SharedPointers to publish a ROS2 message?
 
+Because the `std_msgs::msg::Bool` messager you're creating only needs to be owned/accessed by the `Speaker` object itself, and the other nodes or objects don't need to access that pointer. The ROS2 publisher "takes" the data (when we use `std::move`) and don't need to access the pointer anymore.
+
 8. [C++] Why are we using a m_multi_sound variable? Explain ...
+
+The `m_multi_sound` variable is used by the `Speaker` threads, specifically is used by the AmbientSound thread in order to know if other sound is bing played. That's why the `speakerCb` assigns '0' value before it starts to play the sound, and put it back to '1' at the end of the `PlaySound` method, or if the msg->data is  less or equal than 0.
 
 9. [C++] Why are we freeing the memory allocated by raw pointer "buff" variable and not freeing the memory allocated by the Shared and Unique Pointers? (HARD)
 
+The difference between the raw pointer `buff` and the other pointers (shared_ptr and unique_ptr) is that those other pointers are smart pointers used in modern C++. When the smart pointers are initialized, they create create their own raw pointers, so those smart pointers are responsable for deleting the memory allocated that the raw pointer had specified. 
+
 10. [Docker] Explain with your own words what is the instructions `apt-get autoremove && apt-get clean -y for?`
+
+In linux, the autoremove instruction is used to remove the packages that were used by other packages when they were installed. For example, if we want to install package A, and package A depends on package B so apt-get also installs package B. After we installed A sucessfully, we don't need package B anymore. So we use autoremove to remove package B.
+
+The clean instruction remove all the downloaded repositories, no matter if they are old versions or the current ones.
 
 11. [Docker] If you modify a layer what happen with the previous and the next ones?
 
+In docker, when you start to use/modify an image, the previous layers are not modified, so we are working on the top of those layers. At the same time, the next layers will have the changes that we're making to the current layer. So for example, if we have a docker image where is already installed opencv 3.4, the current layer can't modify that previous installation (unless we write commands to delete and reinstall another version). But, if we have a blank docker image, and we install opencv 4.2, the next layers will have that version already installed.
+
 12. [Docker] Can we change the basic image (`FROM ubuntu:20.04`) from the docker file to another?
+
+No, because the ROS2 Foxy version you're using only targets Ubuntu Focal 20.04 LTS. If we make that change, we will probably have to change several packages versions, or build them from the source code, which could be risky and don't work
 
 Next questions is after you finish the project, it doesn't give points but we really appreciate you feedback:
 * What do you think about this project? is it hard or enough? is it to complicated, is it well structure, explanations and instructions are clear?
+
+I really loved the project. I admire all the effort you invested for build, organize and present the project. For me it was a challenge, but the instructions and the project documentation was clear. Also I appreciated the possibility to create issues at the repository, because it is the closest way to reality in which programmers solve issues. The only recommendation I could mention is the time  to solve it. Although you sent the project a day before I expected, I feel that you could give one or two more days, specially if we want to solve the EXTRA-HOMEWORK points which requires a significant ammount of time. The time was perfect for me to solve the basic points and some extra, but I would have liked to have more time to achieve all the points. In my case, I had other responsibilities (work, house dutties, family) so practically I only had the nights to work on it. But let me repeat, I loved the project and you have to be sure that I learned a lot.
 
 ---
 <!-- ---------------------------------------------------------------------- -->

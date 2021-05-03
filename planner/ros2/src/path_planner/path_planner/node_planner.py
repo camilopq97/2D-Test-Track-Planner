@@ -479,18 +479,24 @@ class PlannerNode(Node):
         # "dt": [float](sept of time for angle a, is constant element)
         # Do not forget and respect the keys names
 
+        # Calculate the step of time for every waypoint
         dt = time / n
+
+        # Define the discretized vector of time, from 0 to time, with dt step
         t_disc = []
         prev = 0.0
         for i in range(0,n):
             t_disc.append(prev+dt)
             prev += dt
 
+        # On each axis, calculate distance and v_max for trapezoidal profile
         d_x = dst[0] - src[0]
         d_y = dst[1] - src[1]
         v_max_x = d_x / ( time * ( 1.0 - pt ) )
         v_max_y = d_y / ( time * ( 1.0 - pt ) )
 
+        # For each stage of the trapezoidal profile (acceleration, constant speed, 
+        # and deacceleration), calculate the velocity and position on each axis.
         vel_x = [0.0]*len(t_disc)
         vel_y = [0.0]*len(t_disc)
         pos_x = [src[0]]*len(t_disc)
@@ -499,29 +505,30 @@ class PlannerNode(Node):
         for index, t_val in enumerate(t_disc):
             if index > 0:
                 if t_val <= time * pt:
+                    # Acceleration
                     vel_x[index] = (v_max_x * t_val) / (pt * time)
                     vel_y[index] = (v_max_y * t_val) / (pt * time)
                     pos_x[index] = pos_x[index-1] + 1/2 * dt * (vel_x[index] + vel_x[index - 1])
                     pos_y[index] = pos_y[index-1] + 1/2 * dt * (vel_y[index] + vel_y[index - 1])
                 elif t_val > time * pt and t_val <= (time * (1 - pt)):
+                    # Constant speed
                     vel_x[index] = v_max_x
                     vel_y[index] = v_max_y
                     pos_x[index] = pos_x[index - 1] + dt * v_max_x
                     pos_y[index] = pos_y[index - 1] + dt * v_max_y
                 elif t_val > (time * (1 - pt)):
+                    # Deacceleration
                     vel_x[index] = v_max_x - ((v_max_x*(t_val - (time * (1 - pt))))/(pt * time))
                     vel_y[index] = v_max_y - ((v_max_y*(t_val - (time * (1 - pt))))/(pt * time))
                     pos_x[index] = pos_x[index - 1] + 1/2 * dt * (vel_x[index] + vel_x[index - 1])
                     pos_y[index] = pos_y[index - 1] + 1/2 * dt * (vel_y[index] + vel_y[index - 1])
 
-        pos_x = [round(val) for val in pos_x]
-        pos_y = [round(val) for val in pos_y]
-
+        # Fill the way_points dictionary
         for index, t_val in enumerate(t_disc):
             way_points.append(
                 {
                     "idx": index,
-                    "pt": (int(pos_x[index]), int(pos_y[index])),
+                    "pt": (int(round(pos_x[index])), int(round(pos_y[index]))),
                     "t": t_val,
                     "dt": dt,
                 }
@@ -564,37 +571,44 @@ class PlannerNode(Node):
         # "dt": [float](sept of time for angle a, is constant element)
         # Do not forget and respect the keys names
 
+        # Calculate the step of time for every waypoint
         dt = time / n
+
+        # Define the discretized vector of time, from 0 to time, with dt step
         t_disc = []
         prev = 0.0
         for i in range(0,n):
             t_disc.append(prev+dt)
             prev += dt
 
+        # Calculate max angular velocity w_max for trapezoidal profile
         w_max = dst / ( time * ( 1.0 - pt ) )
 
+        # For each stage of the trapezoidal profile (acceleration, constant speed, 
+        # and deacceleration), calculate the velocity and position on rotation.
         w_a = [0.0]*len(t_disc)
         th_a = [0.0]*len(t_disc)
-
         for index, t_val in enumerate(t_disc):
             if index > 0:
                 if t_val <= time * pt:
+                    # Acceleration
                     w_a[index] = (w_max * t_val) / (pt * time)
                     th_a[index] = th_a[index-1] + 1/2 * dt * (w_a[index] + w_a[index - 1])
                 elif t_val > time * pt and t_val <= (time * (1 - pt)):
+                    # Constant speed
                     w_a[index] = w_max
                     th_a[index] = th_a[index - 1] + dt * w_max
                 elif t_val > (time * (1 - pt)):
+                    # Deacceleration
                     w_a[index] = w_max - ((w_max*(t_val - (time * (1 - pt))))/(pt * time))
                     th_a[index] = th_a[index - 1] + 1/2 * dt * (w_a[index] + w_a[index - 1])
 
-        th_a = [round(val,1) for val in th_a]
-
+        # Fill the turn_points dictionary
         for index, t_val in enumerate(t_disc):
             turn_points.append(
                 {
                     "idx": index,
-                    "a": th_a[index],
+                    "a": round(th_a[index],1),
                     "t": t_val,
                     "dt": dt,
                 }
